@@ -32,7 +32,6 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
-import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
@@ -82,44 +81,16 @@ public class PayaraMicro {
 
     private static final Logger logger = Logger.getLogger("PayaraMicro");
     private static PayaraMicro instance;
-
-    private String hzMulticastGroup;
-    private int hzPort = Integer.MIN_VALUE;
-    private int hzStartPort = Integer.MIN_VALUE;
-    private String hzClusterName;
-    private String hzClusterPassword;
-    private int httpPort = Integer.MIN_VALUE;
-    private int sslPort = Integer.MIN_VALUE;
-    private int maxHttpThreads = Integer.MIN_VALUE;
-    private int minHttpThreads = Integer.MIN_VALUE;
     private String instanceName = UUID.randomUUID().toString();
-    private File rootDir;
-    private File deploymentRoot;
-    private File alternateDomainXML;
-    private URI alternateHZConfigFile;
-    private List<File> deployments;
     private GlassFish gf;
     private PayaraMicroRuntime runtime;
-    private boolean noCluster = false;
-    private boolean autoBindHttp = false;
-    private boolean autoBindSsl = false;
-    private boolean liteMember = false;
-    private boolean generateLogo = false;
     private boolean logToFile = false;
     private boolean enableAccessLog = false;
     private boolean enableAccessLogFormat = false;
     private boolean logPropertiesFile = false;
-    private String userLogPropertiesFile = "";
-    private int autoBindRange = 5;
     private String bootImage = "boot.txt";
     private String applicationDomainXml;
-    private boolean enableHealthCheck = false;
-    private boolean disablePhoneHome = false;
-    private List<String> GAVs;
-    private File uberJar;
-    private Properties userSystemProperties;
     private Map<String, URL> deploymentURLsMap;
-    private List<URL> repositoryURLs;
     private final String defaultMavenRepository = "https://repo.maven.apache.org/maven2/";
     private final short defaultHttpPort = 8080;
     private final short defaultHttpsPort = 8181;
@@ -128,8 +99,10 @@ public class PayaraMicro {
     private String domainFileName = "domain.xml";
     private String userLogFile = "payara-server%u.log";
     private String userAccessLogDirectory = "";
-    private String accessLogFormat = "%client.name% %auth-user-name% %datetime% %request% %status% %response.length%";
     private String userPropertiesFileName = "";
+    
+    private static ConfigOptions cfgOpts = new ConfigOptions();
+    private static ArgumentParser argparser;
 
     /**
      * Runs a Payara Micro server used via java -jar payara-micro.jar
@@ -163,10 +136,12 @@ public class PayaraMicro {
      * --help Shows this message and exits\n
      * @throws BootstrapException If there is a problem booting the server
      */
+    
+    // removed static from main function -__-
     public static void main(String args[]) throws BootstrapException {
         PayaraMicro main = getInstance();
-        main.scanArgs(args);
-
+        argparser = new ArgumentParser(args,cfgOpts);
+        
         if (main.getUberJar() != null) {
             main.packageUberJar();
         } else {
@@ -215,7 +190,7 @@ public class PayaraMicro {
      * @return The Multicast Group that will beused for the Hazelcast clustering
      */
     public String getClusterMulticastGroup() {
-        return hzMulticastGroup;
+        return cfgOpts.getHzMulticastGroup();
     }
 
     /**
@@ -231,7 +206,7 @@ public class PayaraMicro {
         if (isRunning()) {
             throw new IllegalStateException("Payara Micro is already running, setting attributes has no effect");
         }
-        this.hzMulticastGroup = hzMulticastGroup;
+        this.cfgOpts.setHzMulticastGroup(hzMulticastGroup);
         return this;
     }
 
@@ -254,7 +229,7 @@ public class PayaraMicro {
      * @return
      */
     public PayaraMicro setPrintLogo(boolean generate) {
-        generateLogo = generate;
+        cfgOpts.setGenerateLogo(generate);
         return this;
     }
 
@@ -278,7 +253,7 @@ public class PayaraMicro {
         logToFile = true;
         return this;
     }
-
+    
     /**
      * Set user defined properties file for logging
      *
@@ -288,7 +263,7 @@ public class PayaraMicro {
     public PayaraMicro setLogPropertiesFile(File fileName) {
         System.setProperty("java.util.logging.config.file", fileName.getAbsolutePath());
         logPropertiesFile = true;
-        userLogPropertiesFile = fileName.getAbsolutePath();
+        cfgOpts.setUserLogPropertiesFile(fileName.getAbsolutePath());
         userPropertiesFileName = fileName.getName();
         return this;
     }
@@ -309,7 +284,7 @@ public class PayaraMicro {
      * @param format
      */
     public void setAccessLogFormat(String format) {
-        this.accessLogFormat = format;
+        this.cfgOpts.setAccessLogFormat(format);
         this.enableAccessLogFormat = true;
     }
 
@@ -319,7 +294,7 @@ public class PayaraMicro {
      * @return The configured cluster port
      */
     public int getClusterPort() {
-        return hzPort;
+        return cfgOpts.getHzPort();
     }
 
     /**
@@ -335,7 +310,7 @@ public class PayaraMicro {
         if (isRunning()) {
             throw new IllegalStateException("Payara Micro is already running, setting attributes has no effect");
         }
-        this.hzPort = hzPort;
+        cfgOpts.setHzPort(hzPort);
         return this;
     }
 
@@ -347,7 +322,7 @@ public class PayaraMicro {
      * @return The start port number
      */
     public int getClusterStartPort() {
-        return hzStartPort;
+        return cfgOpts.getHzStartPort();
     }
 
     /**
@@ -362,7 +337,7 @@ public class PayaraMicro {
         if (isRunning()) {
             throw new IllegalStateException("Payara Micro is already running, setting attributes has no effect");
         }
-        this.hzStartPort = hzStartPort;
+        this.cfgOpts.setHzStartPort(hzStartPort);
         return this;
     }
 
@@ -372,7 +347,7 @@ public class PayaraMicro {
      * @return The HTTP port
      */
     public int getHttpPort() {
-        return httpPort;
+        return cfgOpts.getHttpPort();
     }
 
     /**
@@ -386,7 +361,7 @@ public class PayaraMicro {
         if (isRunning()) {
             throw new IllegalStateException("Payara Micro is already running, setting attributes has no effect");
         }
-        this.httpPort = httpPort;
+        this.cfgOpts.setHttpPort(httpPort);
         return this;
     }
 
@@ -396,7 +371,7 @@ public class PayaraMicro {
      * @return The HTTPS port
      */
     public int getSslPort() {
-        return sslPort;
+        return cfgOpts.getSslPort();
     }
 
     /**
@@ -405,7 +380,7 @@ public class PayaraMicro {
      * @return
      */
     public File getUberJar() {
-        return uberJar;
+        return cfgOpts.getUberJar();
     }
 
     /**
@@ -420,7 +395,7 @@ public class PayaraMicro {
         if (isRunning()) {
             throw new IllegalStateException("Payara Micro is already running, setting attributes has no effect");
         }
-        this.sslPort = sslPort;
+        this.cfgOpts.setSslPort(sslPort);
         return this;
     }
 
@@ -431,7 +406,7 @@ public class PayaraMicro {
      * @return The configured instance name
      */
     public String getInstanceName() {
-        return instanceName;
+        return cfgOpts.getInstanceName();
     }
 
     /**
@@ -446,7 +421,7 @@ public class PayaraMicro {
         if (isRunning()) {
             throw new IllegalStateException("Payara Micro is already running, setting attributes has no effect");
         }
-        this.instanceName = instanceName;
+        this.cfgOpts.setInstanceName(instanceName);
         return this;
     }
 
@@ -456,7 +431,7 @@ public class PayaraMicro {
      * @return
      */
     public File getDeploymentDir() {
-        return deploymentRoot;
+        return cfgOpts.getDeploymentRoot();
     }
 
     /**
@@ -472,7 +447,7 @@ public class PayaraMicro {
         if (isRunning()) {
             throw new IllegalStateException("Payara Micro is already running, setting attributes has no effect");
         }
-        this.deploymentRoot = deploymentRoot;
+        this.cfgOpts.setDeploymentRoot(deploymentRoot);
         return this;
     }
 
@@ -482,7 +457,7 @@ public class PayaraMicro {
      * @return The path to the domain.xml
      */
     public File getAlternateDomainXML() {
-        return alternateDomainXML;
+        return cfgOpts.getAlternateDomainXML();
     }
 
     /**
@@ -510,7 +485,7 @@ public class PayaraMicro {
         if (isRunning()) {
             throw new IllegalStateException("Payara Micro is already running, setting attributes has no effect");
         }
-        this.alternateDomainXML = alternateDomainXML;
+        this.cfgOpts.setAlternateDomainXML(alternateDomainXML);
         return this;
     }
 
@@ -544,10 +519,10 @@ public class PayaraMicro {
         if (isRunning()) {
             throw new IllegalStateException("Payara Micro is already running, setting attributes has no effect");
         }
-        if (deployments == null) {
-            deployments = new LinkedList<>();
+        if (cfgOpts.getDeployments() == null) {
+            cfgOpts.setDeployments(new LinkedList<File>());
         }
-        deployments.add(file);
+        cfgOpts.addDeployment(file);
         return this;
     }
 
@@ -562,11 +537,11 @@ public class PayaraMicro {
         if (isRunning()) {
             throw new IllegalStateException("Payara Micro is already running, setting attributes has no effect");
         }
-        if (GAVs == null) {
-            GAVs = new LinkedList<>();
+        if (cfgOpts.getGAVs() == null) {
+            cfgOpts.setGAVs(new LinkedList<String>());
         }
-        GAVs.add(GAV);
-        if (GAVs != null) {
+        cfgOpts.addGAVs(GAV);
+        if (cfgOpts.getGAVs() != null) {
             try {
                 // Convert the provided GAV Strings into target URLs
                 getGAVURLs();
@@ -591,9 +566,9 @@ public class PayaraMicro {
         for (String url : URLs){
             try {
                 if (!url.endsWith("/")) {
-                    repositoryURLs.add(new URL(url + "/"));
+                    cfgOpts.addRepositoryURL(new URL(url + "/"));
                 } else {
-                    repositoryURLs.add(new URL(url));
+                    cfgOpts.addRepositoryURL(new URL(url));
                 }
             } catch (MalformedURLException ex) {
                 logger.log(Level.SEVERE, "{0} is not a valid URL and will be ignored", url);
@@ -608,7 +583,7 @@ public class PayaraMicro {
      * @return
      */
     public boolean isNoCluster() {
-        return noCluster;
+        return cfgOpts.isNoCluster();
     }
 
     /**
@@ -622,7 +597,7 @@ public class PayaraMicro {
         if (isRunning()) {
             throw new IllegalStateException("Payara Micro is already running, setting attributes has no effect");
         }
-        this.noCluster = noCluster;
+        this.cfgOpts.setNoCluster(noCluster);
         return this;
     }
 
@@ -633,7 +608,7 @@ public class PayaraMicro {
      * @return
      */
     public boolean isLite() {
-        return liteMember;
+        return cfgOpts.isLiteMember();
     }
 
     /**
@@ -649,7 +624,7 @@ public class PayaraMicro {
         if (isRunning()) {
             throw new IllegalStateException("Payara Micro is already running, setting attributes has no effect");
         }
-        this.liteMember = liteMember;
+        this.cfgOpts.setLiteMember(liteMember);
         return this;
     }
 
@@ -662,7 +637,7 @@ public class PayaraMicro {
      * @return
      */
     public int getMaxHttpThreads() {
-        return maxHttpThreads;
+        return cfgOpts.getMaxHttpThreads();
     }
 
     /**
@@ -678,7 +653,7 @@ public class PayaraMicro {
         if (isRunning()) {
             throw new IllegalStateException("Payara Micro is already running, setting attributes has no effect");
         }
-        this.maxHttpThreads = maxHttpThreads;
+        this.cfgOpts.setMaxHttpThreads(maxHttpThreads);
         return this;
     }
 
@@ -689,7 +664,7 @@ public class PayaraMicro {
      * @return The minimum threads to be created in the threadpool
      */
     public int getMinHttpThreads() {
-        return minHttpThreads;
+        return cfgOpts.getMinHttpThreads();
     }
 
     /**
@@ -704,7 +679,7 @@ public class PayaraMicro {
         if (isRunning()) {
             throw new IllegalStateException("Payara Micro is already running, setting attributes has no effect");
         }
-        this.minHttpThreads = minHttpThreads;
+        this.cfgOpts.setMinHttpThreads(minHttpThreads);
         return this;
     }
 
@@ -715,7 +690,7 @@ public class PayaraMicro {
      * @return
      */
     public File getRootDir() {
-        return rootDir;
+        return cfgOpts.getRootDir();
     }
 
     /**
@@ -733,7 +708,7 @@ public class PayaraMicro {
         if (isRunning()) {
             throw new IllegalStateException("Payara Micro is already running, setting attributes has no effect");
         }
-        this.rootDir = rootDir;
+        this.cfgOpts.setRootDir(rootDir);
         return this;
     }
 
@@ -743,7 +718,7 @@ public class PayaraMicro {
      * @return
      */
     public boolean getHttpAutoBind() {
-        return autoBindHttp;
+        return cfgOpts.isAutoBindHttp();
     }
 
     /**
@@ -754,7 +729,7 @@ public class PayaraMicro {
      * @return
      */
     public PayaraMicro setHttpAutoBind(boolean httpAutoBind) {
-        this.autoBindHttp = httpAutoBind;
+        this.cfgOpts.setAutoBindHttp(httpAutoBind);
         return this;
     }
 
@@ -764,7 +739,7 @@ public class PayaraMicro {
      * @return
      */
     public boolean getSslAutoBind() {
-        return autoBindSsl;
+        return cfgOpts.isAutoBindSsl();
     }
 
     /**
@@ -775,7 +750,7 @@ public class PayaraMicro {
      * @return
      */
     public PayaraMicro setSslAutoBind(boolean sslAutoBind) {
-        this.autoBindSsl = sslAutoBind;
+        this.cfgOpts.setAutoBindSsl(sslAutoBind);
         return this;
     }
 
@@ -786,7 +761,7 @@ public class PayaraMicro {
      * @return The number of ports to check if free
      */
     public int getAutoBindRange() {
-        return autoBindRange;
+        return cfgOpts.getAutoBindRange();
     }
 
     /**
@@ -798,7 +773,7 @@ public class PayaraMicro {
      * @return
      */
     public PayaraMicro setAutoBindRange(int autoBindRange) {
-        this.autoBindRange = autoBindRange;
+        this.cfgOpts.setAutoBindRange(autoBindRange);
         return this;
     }
 
@@ -808,7 +783,7 @@ public class PayaraMicro {
      * @return The current Cluster Name
      */
     public String getHzClusterName() {
-        return hzClusterName;
+        return cfgOpts.getHzClusterName();
     }
 
     /**
@@ -817,7 +792,7 @@ public class PayaraMicro {
      * @return
      */
     public PayaraMicro setHzClusterName(String hzClusterName) {
-        this.hzClusterName = hzClusterName;
+        this.cfgOpts.setHzClusterName(hzClusterName);
         return this;
     }
 
@@ -826,7 +801,7 @@ public class PayaraMicro {
      * @return
      */
     public String getHzClusterPassword() {
-        return hzClusterPassword;
+        return cfgOpts.getHzClusterPassword();
     }
 
     /**
@@ -836,7 +811,7 @@ public class PayaraMicro {
      * @return
      */
     public PayaraMicro setHzClusterPassword(String hzClusterPassword) {
-        this.hzClusterPassword = hzClusterPassword;
+        this.cfgOpts.setHzClusterPassword(hzClusterPassword);
         return this;
     }
 
@@ -858,29 +833,29 @@ public class PayaraMicro {
         // check hazelcast cluster overrides
         MulticastConfiguration mc = new MulticastConfiguration();
         mc.setMemberName(instanceName);
-        if (hzPort > Integer.MIN_VALUE) {
-            mc.setMulticastPort(hzPort);
+        if (cfgOpts.getHzPort() > Integer.MIN_VALUE) {
+            mc.setMulticastPort(cfgOpts.getHzPort());
         }
 
-        if (hzStartPort > Integer.MIN_VALUE) {
-            mc.setStartPort(hzStartPort);
+        if (cfgOpts.getHzStartPort() > Integer.MIN_VALUE) {
+            mc.setStartPort(cfgOpts.getHzStartPort());
         }
 
-        if (hzMulticastGroup != null) {
-            mc.setMulticastGroup(hzMulticastGroup);
+        if (cfgOpts.getHzMulticastGroup() != null) {
+            mc.setMulticastGroup(cfgOpts.getHzMulticastGroup());
         }
 
-        if (alternateHZConfigFile != null) {
-            mc.setAlternateConfiguration(alternateHZConfigFile);
+        if (cfgOpts.getAlternateHZConfigFile() != null) {
+            mc.setAlternateConfiguration(cfgOpts.getAlternateHZConfigFile());
         }
-        mc.setLite(liteMember);
+        mc.setLite(cfgOpts.isLiteMember());
 
-        if (hzClusterName != null) {
-            mc.setClusterGroupName(hzClusterName);
+        if (cfgOpts.getHzClusterName() != null) {
+            mc.setClusterGroupName(cfgOpts.getHzClusterName());
         }
 
-        if (hzClusterPassword != null) {
-            mc.setClusterGroupPassword(hzClusterPassword);
+        if (cfgOpts.getHzClusterPassword() != null) {
+            mc.setClusterGroupPassword(cfgOpts.getHzClusterPassword());
         }
 
         HazelcastCore.setMulticastOverride(mc);
@@ -890,7 +865,7 @@ public class PayaraMicro {
         GlassFishRuntime gfruntime;
         PortBinder portBinder = new PortBinder();
 
-        if (disablePhoneHome == true) {
+        if (cfgOpts.isDisablePhoneHome() == true) {
             PhoneHomeCore.setOverrideEnabled(false);
         }
 
@@ -898,20 +873,20 @@ public class PayaraMicro {
             gfruntime = GlassFishRuntime.bootstrap(bprops, Thread.currentThread().getContextClassLoader());
             GlassFishProperties gfproperties = new GlassFishProperties();
 
-            if (httpPort != Integer.MIN_VALUE) {
-                if (autoBindHttp == true) {
+            if (cfgOpts.getHttpPort() != Integer.MIN_VALUE) {
+                if (cfgOpts.isAutoBindHttp() == true) {
                     // Log warnings if overriding other options
                     logPortPrecedenceWarnings(false);
 
                     // Search for an available port from the specified port
                     try {
                         gfproperties.setPort("http-listener",
-                                portBinder.findAvailablePort(httpPort,
-                                        autoBindRange));
+                                portBinder.findAvailablePort(cfgOpts.getHttpPort(),
+                                        cfgOpts.getAutoBindRange()));
                     } catch (BindException ex) {
                         logger.log(Level.SEVERE, "No available port found in range: "
-                                + httpPort + " - "
-                                + (httpPort + autoBindRange), ex);
+                                + cfgOpts.getHttpPort() + " - "
+                                + (cfgOpts.getHttpPort() + cfgOpts.getAutoBindRange()), ex);
 
                         throw new GlassFishException("Could not bind HTTP port");
                     }
@@ -920,9 +895,9 @@ public class PayaraMicro {
                     logPortPrecedenceWarnings(false);
 
                     // Set the port as normal
-                    gfproperties.setPort("http-listener", httpPort);
+                    gfproperties.setPort("http-listener", cfgOpts.getHttpPort());
                 }
-            } else if (autoBindHttp == true) {
+            } else if (cfgOpts.isAutoBindHttp() == true) {
                 // Log warnings if overriding other options
                 logPortPrecedenceWarnings(false);
 
@@ -930,28 +905,28 @@ public class PayaraMicro {
                 try {
                     gfproperties.setPort("http-listener",
                             portBinder.findAvailablePort(defaultHttpPort,
-                                    autoBindRange));
+                                    cfgOpts.getAutoBindRange()));
                 } catch (BindException ex) {
                     logger.log(Level.SEVERE, "No available port found in range: "
                             + defaultHttpPort + " - "
-                            + (defaultHttpPort + autoBindRange), ex);
+                            + (defaultHttpPort + cfgOpts.getAutoBindRange()), ex);
 
                     throw new GlassFishException("Could not bind HTTP port");
                 }
             }
 
-            if (sslPort != Integer.MIN_VALUE) {
-                if (autoBindSsl == true) {
+            if (cfgOpts.getSslPort() != Integer.MIN_VALUE) {
+                if (cfgOpts.isAutoBindSsl() == true) {
                     // Log warnings if overriding other options
                     logPortPrecedenceWarnings(true);
 
                     // Search for an available port from the specified port
                     try {
                         gfproperties.setPort("https-listener",
-                                portBinder.findAvailablePort(sslPort, autoBindRange));
+                                portBinder.findAvailablePort(cfgOpts.getSslPort(), cfgOpts.getAutoBindRange()));
                     } catch (BindException ex) {
                         logger.log(Level.SEVERE, "No available port found in range: "
-                                + sslPort + " - " + (sslPort + autoBindRange), ex);
+                                + cfgOpts.getSslPort() + " - " + (cfgOpts.getSslPort() + cfgOpts.getAutoBindRange()), ex);
 
                         throw new GlassFishException("Could not bind SSL port");
                     }
@@ -960,44 +935,44 @@ public class PayaraMicro {
                     logPortPrecedenceWarnings(true);
 
                     // Set the port as normal
-                    gfproperties.setPort("https-listener", sslPort);
+                    gfproperties.setPort("https-listener", cfgOpts.getSslPort());
                 }
-            } else if (autoBindSsl == true) {
+            } else if (cfgOpts.isAutoBindSsl() == true) {
                 // Log warnings if overriding other options
                 logPortPrecedenceWarnings(true);
 
                 // Search for an available port from the default HTTPS port
                 try {
                     gfproperties.setPort("https-listener",
-                            portBinder.findAvailablePort(defaultHttpsPort, autoBindRange));
+                            portBinder.findAvailablePort(defaultHttpsPort, cfgOpts.getAutoBindRange()));
                 } catch (BindException ex) {
                     logger.log(Level.SEVERE, "No available port found in range: "
-                            + defaultHttpsPort + " - " + (defaultHttpsPort + autoBindRange), ex);
+                            + defaultHttpsPort + " - " + (defaultHttpsPort + cfgOpts.getAutoBindRange()), ex);
 
                     throw new GlassFishException("Could not bind SSL port");
                 }
             } 
 
-            if (alternateDomainXML != null) {
+            if (cfgOpts.getAlternateDomainXML() != null) {
                 gfproperties.setConfigFileReadOnly(false);
-                gfproperties.setConfigFileURI("file:///" + alternateDomainXML.getAbsolutePath().replace('\\', '/'));
+                gfproperties.setConfigFileURI("file:///" + cfgOpts.getAlternateDomainXML().getAbsolutePath().replace('\\', '/'));
             } else if (applicationDomainXml != null) {
                 gfproperties.setConfigFileURI(Thread.currentThread().getContextClassLoader().getResource(applicationDomainXml).toExternalForm());
-            } else if (noCluster) {
+            } else if (cfgOpts.isNoCluster()) {
                 gfproperties.setConfigFileURI(Thread.currentThread().getContextClassLoader().getResource("microdomain-nocluster.xml").toExternalForm());
 
             } else {
                 gfproperties.setConfigFileURI(Thread.currentThread().getContextClassLoader().getResource("microdomain.xml").toExternalForm());
             }
 
-            if (rootDir != null) {
-                gfproperties.setInstanceRoot(rootDir.getAbsolutePath());
-                File configFile = new File(rootDir.getAbsolutePath() + File.separator + "config" + File.separator + "domain.xml");
+            if (cfgOpts.getRootDir() != null) {
+                gfproperties.setInstanceRoot(cfgOpts.getRootDir().getAbsolutePath());
+                File configFile = new File(cfgOpts.getRootDir().getAbsolutePath() + File.separator + "config" + File.separator + "domain.xml");
                 if (!configFile.exists()) {
                     installFiles(gfproperties);
                 } else {
-                    if (alternateDomainXML ==null) {
-                        String absolutePath = rootDir.getAbsolutePath();
+                    if (cfgOpts.getAlternateDomainXML() == null) {
+                        String absolutePath = cfgOpts.getRootDir().getAbsolutePath();
                         absolutePath = absolutePath.replace('\\', '/');
                         gfproperties.setConfigFileURI("file:///" + absolutePath + "/config/domain.xml");
                         gfproperties.setConfigFileReadOnly(false);
@@ -1006,12 +981,12 @@ public class PayaraMicro {
 
             }
 
-            if (this.maxHttpThreads != Integer.MIN_VALUE) {
-                gfproperties.setProperty("embedded-glassfish-config.server.thread-pools.thread-pool.http-thread-pool.max-thread-pool-size", Integer.toString(maxHttpThreads));
+            if (this.cfgOpts.getMaxHttpThreads() != Integer.MIN_VALUE) {
+                gfproperties.setProperty("embedded-glassfish-config.server.thread-pools.thread-pool.http-thread-pool.max-thread-pool-size", Integer.toString(cfgOpts.getMaxHttpThreads()));
             }
 
-            if (this.minHttpThreads != Integer.MIN_VALUE) {
-                gfproperties.setProperty("embedded-glassfish-config.server.thread-pools.thread-pool.http-thread-pool.min-thread-pool-size", Integer.toString(minHttpThreads));
+            if (this.cfgOpts.getMinHttpThreads() != Integer.MIN_VALUE) {
+                gfproperties.setProperty("embedded-glassfish-config.server.thread-pools.thread-pool.http-thread-pool.min-thread-pool-size", Integer.toString(cfgOpts.getMinHttpThreads()));
             }
             
             if (enableAccessLog) {
@@ -1019,7 +994,7 @@ public class PayaraMicro {
                 gfproperties.setProperty("embedded-glassfish-config.server.http-service.virtual-server.server.access-logging-enabled", "true");
                 gfproperties.setProperty("embedded-glassfish-config.server.http-service.virtual-server.server.access-log", userAccessLogDirectory);
                 if (enableAccessLogFormat) {
-                    gfproperties.setProperty("embedded-glassfish-config.server.http-service.access-log.format", accessLogFormat);
+                    gfproperties.setProperty("embedded-glassfish-config.server.http-service.access-log.format", cfgOpts.getAccessLogFormat());
                 }
             }
             gf = gfruntime.newGlassFish(gfproperties);
@@ -1039,7 +1014,7 @@ public class PayaraMicro {
                     content = content.replace("access-log=\"\"", "access-log=\"" + userAccessLogDirectory + "\"");
                     if (enableAccessLogFormat) {
                         content = content.replace("access-log format=\"%client.name% %auth-user-name% %datetime% %request% %status% %response.length%\"",
-                                "access-log format=\"" + accessLogFormat + "\"");
+                                "access-log format=\"" + cfgOpts.getAccessLogFormat() + "\"");
                     }
                     Files.write(domainFile, content.getBytes(charset));
                 } catch (IOException ex) {
@@ -1081,13 +1056,13 @@ public class PayaraMicro {
             this.runtime = new PayaraMicroRuntime(instanceName, gf, gfruntime);
             deployAll();
 
-            if (generateLogo) {
+            if (cfgOpts.isGenerateLogo()) {
                 generateLogo();
             }
 
-            if (enableHealthCheck) {
+            if (cfgOpts.isEnableHealthCheck()) {
                 HealthCheckService healthCheckService = gf.getService(HealthCheckService.class);
-                healthCheckService.setEnabled(enableHealthCheck);
+                healthCheckService.setEnabled(cfgOpts.isEnableHealthCheck());
             }
 
             long end = System.currentTimeMillis();
@@ -1128,8 +1103,8 @@ public class PayaraMicro {
 
     private PayaraMicro() {
         try {
-            repositoryURLs = new LinkedList<>();
-            repositoryURLs.add(new URL(defaultMavenRepository));
+            cfgOpts.setRepositoryURLs(new LinkedList<URL>());
+            cfgOpts.addRepositoryURL(new URL(defaultMavenRepository));
             setArgumentsFromSystemProperties();
             addShutdownHook();
         } catch (MalformedURLException ex) {
@@ -1137,353 +1112,354 @@ public class PayaraMicro {
         }
     }
 
-    private void scanArgs(String[] args) {
-        for (int i = 0; i < args.length; i++) {
-            String arg = args[i];
-            if (null != arg) {
-                switch (arg) {
-                    case "--port": {
-                        String httpPortS = args[i + 1];
-                        try {
-                            httpPort = Integer.parseInt(httpPortS);
-                            if (httpPort < 1 || httpPort > 65535) {
-                                throw new NumberFormatException("Not a valid tcp port");
-                            }
-                        } catch (NumberFormatException nfe) {
-                            logger.log(Level.SEVERE, "{0} is not a valid http port number", httpPortS);
-                            throw new IllegalArgumentException();
-                        }
-                        i++;
-                        break;
-                    }
-                    case "--sslPort": {
-                        String httpPortS = args[i + 1];
-                        try {
-                            sslPort = Integer.parseInt(httpPortS);
-                            if (sslPort < 1 || sslPort > 65535) {
-                                throw new NumberFormatException("Not a valid tcp port");
-                            }
-                        } catch (NumberFormatException nfe) {
-                            logger.log(Level.SEVERE, "{0} is not a valid ssl port number and will be ignored", httpPortS);
-                            throw new IllegalArgumentException();
-                        }
-                        i++;
-                        break;
-                    }
-                    case "--version": {
-                        String deployments = System.getProperty("user.dir");
-                        System.err.println("deployments " + deployments);
-                        try {
-                            Properties props = new Properties();
-                            InputStream input = PayaraMicro.class.getResourceAsStream("/config/branding/glassfish-version.properties");
-                            props.load(input);
-                            StringBuilder output = new StringBuilder();
-                            if (props.getProperty("product_name").isEmpty() == false){
-                                output.append(props.getProperty("product_name")+" ");
-                            }
-                            if (props.getProperty("major_version").isEmpty() == false){
-                                output.append(props.getProperty("major_version")+".");
-                            }
-                            if (props.getProperty("minor_version").isEmpty() == false){
-                                output.append(props.getProperty("minor_version")+".");
-                            }
-                            if (props.getProperty("update_version").isEmpty() == false){
-                                output.append(props.getProperty("update_version")+".");
-                            }
-                            if (props.getProperty("payara_version").isEmpty() == false){
-                                output.append(props.getProperty("payara_version"));
-                            }
-                            if (props.getProperty("payara_update_version").isEmpty() == false){
-                                output.append("." + props.getProperty("payara_update_version"));
-                            }
-                            if (props.getProperty("build_id").isEmpty() == false){
-                                output.append(" Build Number " + props.getProperty("build_id"));
-                            }
-
-                            System.err.println(output.toString());
-                        } catch (FileNotFoundException ex) {
-                            Logger.getLogger(PayaraMicro.class.getName()).log(Level.SEVERE, null, ex);
-                        } catch (IOException io){
-                            Logger.getLogger(PayaraMicro.class.getName()).log(Level.SEVERE, null, io);
-                        }
-                        System.exit(1);
-                        break;
-                    }
-                    case "--maxHttpThreads": {
-                        String threads = args[i + 1];
-                        try {
-                            maxHttpThreads = Integer.parseInt(threads);
-                            if (maxHttpThreads < 2) {
-                                throw new NumberFormatException("Maximum Threads must be 2 or greater");
-                            }
-                        } catch (NumberFormatException nfe) {
-                            logger.log(Level.SEVERE, "{0} is not a valid maximum threads number and will be ignored", threads);
-                            throw new IllegalArgumentException();
-                        }
-                        i++;
-                        break;
-                    }
-                    case "--minHttpThreads": {
-                        String threads = args[i + 1];
-                        try {
-                            minHttpThreads = Integer.parseInt(threads);
-                            if (minHttpThreads < 0) {
-                                throw new NumberFormatException("Minimum Threads must be zero or greater");
-                            }
-                        } catch (NumberFormatException nfe) {
-                            logger.log(Level.SEVERE, "{0} is not a valid minimum threads number and will be ignored", threads);
-                            throw new IllegalArgumentException();
-                        }
-                        i++;
-                        break;
-                    }
-                    case "--mcAddress":
-                        hzMulticastGroup = args[i + 1];
-                        i++;
-                        break;
-                case "--clusterName" :
-                    hzClusterName = args[i+1];
-                        i++;
-                        break;
-                case "--clusterPassword" :
-                    hzClusterPassword = args[i+1];
-                        i++;
-                        break;
-                    case "--mcPort": {
-                        String httpPortS = args[i + 1];
-                        try {
-                            hzPort = Integer.parseInt(httpPortS);
-                            if (hzPort < 1 || hzPort > 65535) {
-                                throw new NumberFormatException("Not a valid tcp port");
-                            }
-                        } catch (NumberFormatException nfe) {
-                            logger.log(Level.SEVERE, "{0} is not a valid multicast port number and will be ignored", httpPortS);
-                            throw new IllegalArgumentException();
-                        }
-                        i++;
-                        break;
-                    }
-                    case "--startPort":
-                        String startPort = args[i + 1];
-                        try {
-                            hzStartPort = Integer.parseInt(startPort);
-                            if (hzStartPort < 1 || hzStartPort > 65535) {
-                                throw new NumberFormatException("Not a valid tcp port");
-                            }
-                        } catch (NumberFormatException nfe) {
-                            logger.log(Level.SEVERE, "{0} is not a valid port number and will be ignored", startPort);
-                            throw new IllegalArgumentException();
-                        }
-                        i++;
-                        break;
-                    case "--name":
-                        instanceName = args[i + 1];
-                        i++;
-                        break;
-                    case "--deploymentDir":
-                    case "--deployDir":
-                        deploymentRoot = new File(args[i + 1]);
-                        if (!deploymentRoot.exists() || !deploymentRoot.isDirectory()) {
-                            logger.log(Level.SEVERE, "{0} is not a valid deployment directory and will be ignored", args[i + 1]);
-                            throw new IllegalArgumentException();
-                        }
-                        i++;
-                        break;
-                    case "--rootDir":
-                        rootDir = new File(args[i + 1]);
-                        if (!rootDir.exists() || !rootDir.isDirectory()) {
-                            logger.log(Level.SEVERE, "{0} is not a valid root directory and will be ignored", args[i + 1]);
-                            throw new IllegalArgumentException();
-                        }
-                        i++;
-                        break;
-                    case "--deploy":
-                        File deployment = new File(args[i + 1]);
-                        if (!deployment.exists() || !deployment.canRead()) {
-                            logger.log(Level.SEVERE, "{0} is not a valid deployment path and will be ignored", deployment.getAbsolutePath());
-                        } else {
-                            if (deployments == null) {
-                                deployments = new LinkedList<>();
-                            }
-                            deployments.add(deployment);
-                        }
-                        i++;
-                        break;
-                    case "--domainConfig":
-                        alternateDomainXML = new File(args[i + 1]);
-                        if (!alternateDomainXML.exists() || !alternateDomainXML.isFile() || !alternateDomainXML.canRead() || !alternateDomainXML.getAbsolutePath().endsWith(".xml")) {
-                            logger.log(Level.SEVERE, "{0} is not a valid path to an xml file and will be ignored", alternateDomainXML.getAbsolutePath());
-                            throw new IllegalArgumentException();
-                        }
-                        i++;
-                        break;
-                    case "--noCluster":
-                        noCluster = true;
-                        break;
-                    case "--lite":
-                        liteMember = true;
-                        break;
-                    case "--hzConfigFile":
-                        File testFile = new File(args[i + 1]);
-                        if (!testFile.exists() || !testFile.isFile() || !testFile.canRead() || !testFile.getAbsolutePath().endsWith(".xml")) {
-                            logger.log(Level.SEVERE, "{0} is not a valid path to an xml file and will be ignored", testFile.getAbsolutePath());
-                            throw new IllegalArgumentException();
-                        }
-                        alternateHZConfigFile = testFile.toURI();
-                        i++;
-                        break;
-                    case "--autoBindHttp":
-                        autoBindHttp = true;
-                        break;
-                    case "--autoBindSsl":
-                        autoBindSsl = true;
-                        break;
-                    case "--autoBindRange":
-                        String autoBindRangeString = args[i + 1];
-                        try {
-                            autoBindRange = Integer.parseInt(autoBindRangeString);
-                            if (autoBindRange < 1) {
-                                throw new NumberFormatException("Not a valid auto bind range");
-                            }
-                        } catch (NumberFormatException nfe) {
-                            logger.log(Level.SEVERE,
-                                    "{0} is not a valid auto bind range number",
-                                    autoBindRangeString);
-                            throw new IllegalArgumentException();
-                        }
-                        i++;
-                        break;
-                    case "--enableHealthCheck":
-                        String enableHealthCheckString = args[i + 1];
-                        enableHealthCheck = Boolean.valueOf(enableHealthCheckString);
-                        break;
-                    case "--deployFromGAV":
-                        if (GAVs == null) {
-                            GAVs = new LinkedList<>();
-                        }
-
-                        GAVs.add(args[i + 1]);
-                        i++;
-                        break;
-                    case "--additionalRepository":
-                        try {
-                            // If there isn't a trailing /, add one
-                            if (!args[i + 1].endsWith("/")) {
-                                repositoryURLs.add(new URL(args[i + 1] + "/"));
-                            } else {
-                                repositoryURLs.add(new URL(args[i + 1]));
-                            }
-                        } catch (MalformedURLException ex) {
-                            logger.log(Level.SEVERE, "{0} is not a valid URL and will be ignored", args[i + 1]);
-                        }
-
-                        i++;
-                        break;
-                    case "--outputUberJar":
-                        uberJar = new File(args[i + 1]);
-                        i++;
-                        break;
-                    case "--systemProperties": {
-                        File propertiesFile = new File(args[i + 1]);
-                        userSystemProperties = new Properties();
-                        try (FileReader reader = new FileReader(propertiesFile)) {
-                            userSystemProperties.load(reader);
-                            Enumeration<String> names = (Enumeration<String>) userSystemProperties.propertyNames();
-                            while (names.hasMoreElements()) {
-                                String name = names.nextElement();
-                                System.setProperty(name, userSystemProperties.getProperty(name));
-                            }
-                        } catch (IOException e) {
-                            logger.log(Level.SEVERE,
-                                    "{0} is not a valid properties file",
-                                    propertiesFile.getAbsolutePath());
-                            throw new IllegalArgumentException(e);
-                        }
-                        if (!propertiesFile.isFile() && !propertiesFile.canRead()) {
-                            logger.log(Level.SEVERE,
-                                    "{0} is not a valid properties file",
-                                    propertiesFile.getAbsolutePath());
-                            throw new IllegalArgumentException();
-
-                        }
-                    }
-                    break;
-                    case "--disablePhoneHome":
-                        disablePhoneHome = true;
-                        break;
-                    case "--help":
-                        System.err.println("Usage:\n  --noCluster  Disables clustering\n"
-                                + "  --port <http-port-number> sets the http port\n"
-                                + "  --sslPort <ssl-port-number> sets the https port number\n"
-                                + "  --mcAddress <muticast-address> sets the cluster multicast group\n"
-                                + "  --mcPort <multicast-port-number> sets the cluster multicast port\n"
-                                + "  --clusterName <cluster-name> sets the Cluster Group Name\n"
-                                + "  --clusterPassword <cluster-password> sets the Cluster Group Password\n"
-                                + "  --startPort <cluster-start-port-number> sets the cluster start port number\n"
-                                + "  --name <instance-name> sets the instance name\n"
-                                + "  --rootDir <directory-path> Sets the root configuration directory and saves the configuration across restarts\n"
-                                + "  --deploymentDir <directory-path> if set to a valid directory all war files in this directory will be deployed\n"
-                                + "  --deploy <file-path> specifies a war file to deploy\n"
-                                + "  --domainConfig <file-path> overrides the complete server configuration with an alternative domain.xml file\n"
-                                + "  --minHttpThreads <threads-number> the minimum number of threads in the HTTP thread pool\n"
-                                + "  --maxHttpThreads <threads-number> the maximum number of threads in the HTTP thread pool\n"
-                                + "  --hzConfigFile <file-path> the hazelcast-configuration file to use to override the in-built hazelcast cluster configuration\n"
-                                + "  --autoBindHttp sets autobinding of the http port to a non-bound port\n"
-                                + "  --autoBindSsl sets autobinding of the https port to a non-bound port\n"
-                                + "  --autoBindRange <number-of-ports> sets the maximum number of ports to look at for port autobinding\n"
-                                + "  --lite sets the micro container to lite mode which means it clusters with other Payara Micro instances but does not store any cluster data\n"
-                                + "  --enableHealthCheck <boolean> enables/disables Health Check Service (disabled by default).\n"
-                                + "  --logo reveal the #BadAssFish\n"
-                                + "  --deployFromGAV <list-of-artefacts> specifies a comma separated groupId,artifactId,versionNumber of an artefact to deploy from a repository\n"
-                                + "  --additionalRepository <repo-url> specifies an additional repository to search for deployable artefacts in\n"
-                                + "  --outputUberJar <file-path> packages up an uber jar at the specified path based on the command line arguments and exits\n"
-                                + "  --systemProperties <file-path> Reads system properties from a file\n"
-                                + "  --disablePhoneHome Disables sending of usage tracking information\n"
-                                + "  --version Displays the version information\n"
-                                + "  --logToFile <file-path> outputs all the Log entries to a user defined file\n"
-                                + "  --logProperties <file-path> Allows user to set their own logging properties file\n"
-                                + "  --accessLog <directory-path> Sets user defined directory path for the access log\n"
-                                + "  --accessLogFormat Sets user defined log format for the access log\n"
-                                + "  --help Shows this message and exits\n");
-                        System.exit(1);
-                        break;
-                    case "--logToFile":
-                         setUserLogFile(args[i + 1]);
-                        break;
-                    case "--accessLog":
-                        File file = new File(args[i + 1]);
-                        if (!file.exists() || !file.isDirectory() || !file.canWrite()) {
-                            logger.log(Level.SEVERE, "{0} is not a valid directory for storing access logs as it must exist and be writable", file.getAbsolutePath());                            
-                            throw new IllegalArgumentException();
-                        }
-                        setAccessLogDir(file.getAbsolutePath());
-			break;
-                    case "--accessLogFormat":
-                        setAccessLogFormat(args[i + 1]);
-			break;
-                    case "--logProperties":
-                        File logPropertiesFile = new File(args[i + 1]);
-                        if (!logPropertiesFile.exists() || !logPropertiesFile.canRead() || logPropertiesFile.isDirectory() ) {
-                            logger.log(Level.SEVERE, "{0} is not a valid properties file path", logPropertiesFile.getAbsolutePath());
-                            throw new IllegalArgumentException();
-                        } else {
-                            setLogPropertiesFile(logPropertiesFile);
-                        }
-                        break;
-                    case "--logo":
-                        generateLogo = true;
-                        break;
-                }
-            }
-        }
-    }
+//    private void scanArgs(String[] args) {
+//        for (int i = 0; i < args.length; i++) {
+//            String arg = args[i];
+//            if (null != arg) {
+//                switch (arg) {
+//                    case "--port": {
+//                        String httpPortS = args[i + 1];
+//                        try {
+//                            httpPort = Integer.parseInt(httpPortS);
+//                            if (httpPort < 1 || httpPort > 65535) {
+//                                throw new NumberFormatException("Not a valid tcp port");
+//                            }
+//                        } catch (NumberFormatException nfe) {
+//                            logger.log(Level.SEVERE, "{0} is not a valid http port number", httpPortS);
+//                            throw new IllegalArgumentException();
+//                        }
+//                        i++;
+//                        break;
+//                    }
+//                    case "--sslPort": {
+//                        String httpPortS = args[i + 1];
+//                        try {
+//                            sslPort = Integer.parseInt(httpPortS);
+//                            if (sslPort < 1 || sslPort > 65535) {
+//                                throw new NumberFormatException("Not a valid tcp port");
+//                            }
+//                        } catch (NumberFormatException nfe) {
+//                            logger.log(Level.SEVERE, "{0} is not a valid ssl port number and will be ignored", httpPortS);
+//                            throw new IllegalArgumentException();
+//                        }
+//                        i++;
+//                        break;
+//                    }
+//                    case "--version": {
+//                        String deployments = System.getProperty("user.dir");
+//                        System.err.println("deployments " + deployments);
+//                        try {
+//                            Properties props = new Properties();
+//                            InputStream input = PayaraMicro.class.getResourceAsStream("/config/branding/glassfish-version.properties");
+//                            props.load(input);
+//                            StringBuilder output = new StringBuilder();
+//                            if (props.getProperty("product_name").isEmpty() == false){
+//                                output.append(props.getProperty("product_name")+" ");
+//                         
+//}
+//                            if (props.getProperty("major_version").isEmpty() == false){
+//                                output.append(props.getProperty("major_version")+".");
+//                            }
+//                            if (props.getProperty("minor_version").isEmpty() == false){
+//                                output.append(props.getProperty("minor_version")+".");
+//                            }
+//                            if (props.getProperty("update_version").isEmpty() == false){
+//                                output.append(props.getProperty("update_version")+".");
+//                            }
+//                            if (props.getProperty("payara_version").isEmpty() == false){
+//                                output.append(props.getProperty("payara_version"));
+//                            }
+//                            if (props.getProperty("payara_update_version").isEmpty() == false){
+//                                output.append("." + props.getProperty("payara_update_version"));
+//                            }
+//                            if (props.getProperty("build_id").isEmpty() == false){
+//                                output.append(" Build Number " + props.getProperty("build_id"));
+//                            }
+//
+//                            System.err.println(output.toString());
+//                        } catch (FileNotFoundException ex) {
+//                            Logger.getLogger(PayaraMicro.class.getName()).log(Level.SEVERE, null, ex);
+//                        } catch (IOException io){
+//                            Logger.getLogger(PayaraMicro.class.getName()).log(Level.SEVERE, null, io);
+//                        }
+//                        System.exit(1);
+//                        break;
+//                    }
+//                    case "--maxHttpThreads": {
+//                        String threads = args[i + 1];
+//                        try {
+//                            maxHttpThreads = Integer.parseInt(threads);
+//                            if (maxHttpThreads < 2) {
+//                                throw new NumberFormatException("Maximum Threads must be 2 or greater");
+//                            }
+//                        } catch (NumberFormatException nfe) {
+//                            logger.log(Level.SEVERE, "{0} is not a valid maximum threads number and will be ignored", threads);
+//                            throw new IllegalArgumentException();
+//                        }
+//                        i++;
+//                        break;
+//                    }
+//                    case "--minHttpThreads": {
+//                        String threads = args[i + 1];
+//                        try {
+//                            minHttpThreads = Integer.parseInt(threads);
+//                            if (minHttpThreads < 0) {
+//                                throw new NumberFormatException("Minimum Threads must be zero or greater");
+//                            }
+//                        } catch (NumberFormatException nfe) {
+//                            logger.log(Level.SEVERE, "{0} is not a valid minimum threads number and will be ignored", threads);
+//                            throw new IllegalArgumentException();
+//                        }
+//                        i++;
+//                        break;
+//                    }
+//                    case "--mcAddress":
+//                        hzMulticastGroup = args[i + 1];
+//                        i++;
+//                        break;
+//                case "--clusterName" :
+//                    hzClusterName = args[i+1];
+//                        i++;
+//                        break;
+//                case "--clusterPassword" :
+//                    hzClusterPassword = args[i+1];
+//                        i++;
+//                        break;
+//                    case "--mcPort": {
+//                        String httpPortS = args[i + 1];
+//                        try {
+//                            hzPort = Integer.parseInt(httpPortS);
+//                            if (hzPort < 1 || hzPort > 65535) {
+//                                throw new NumberFormatException("Not a valid tcp port");
+//                            }
+//                        } catch (NumberFormatException nfe) {
+//                            logger.log(Level.SEVERE, "{0} is not a valid multicast port number and will be ignored", httpPortS);
+//                            throw new IllegalArgumentException();
+//                        }
+//                        i++;
+//                        break;
+//                    }
+//                    case "--startPort":
+//                        String startPort = args[i + 1];
+//                        try {
+//                            hzStartPort = Integer.parseInt(startPort);
+//                            if (hzStartPort < 1 || hzStartPort > 65535) {
+//                                throw new NumberFormatException("Not a valid tcp port");
+//                            }
+//                        } catch (NumberFormatException nfe) {
+//                            logger.log(Level.SEVERE, "{0} is not a valid port number and will be ignored", startPort);
+//                            throw new IllegalArgumentException();
+//                        }
+//                        i++;
+//                        break;
+//                    case "--name":
+//                        instanceName = args[i + 1];
+//                        i++;
+//                        break;
+//                    case "--deploymentDir":
+//                    case "--deployDir":
+//                        deploymentRoot = new File(args[i + 1]);
+//                        if (!deploymentRoot.exists() || !deploymentRoot.isDirectory()) {
+//                            logger.log(Level.SEVERE, "{0} is not a valid deployment directory and will be ignored", args[i + 1]);
+//                            throw new IllegalArgumentException();
+//                        }
+//                        i++;
+//                        break;
+//                    case "--rootDir":
+//                        rootDir = new File(args[i + 1]);
+//                        if (!rootDir.exists() || !rootDir.isDirectory()) {
+//                            logger.log(Level.SEVERE, "{0} is not a valid root directory and will be ignored", args[i + 1]);
+//                            throw new IllegalArgumentException();
+//                        }
+//                        i++;
+//                        break;
+//                    case "--deploy":
+//                        File deployment = new File(args[i + 1]);
+//                        if (!deployment.exists() || !deployment.canRead()) {
+//                            logger.log(Level.SEVERE, "{0} is not a valid deployment path and will be ignored", deployment.getAbsolutePath());
+//                        } else {
+//                            if (deployments == null) {
+//                                deployments = new LinkedList<>();
+//                            }
+//                            deployments.add(deployment);
+//                        }
+//                        i++;
+//                        break;
+//                    case "--domainConfig":
+//                        alternateDomainXML = new File(args[i + 1]);
+//                        if (!alternateDomainXML.exists() || !alternateDomainXML.isFile() || !alternateDomainXML.canRead() || !alternateDomainXML.getAbsolutePath().endsWith(".xml")) {
+//                            logger.log(Level.SEVERE, "{0} is not a valid path to an xml file and will be ignored", alternateDomainXML.getAbsolutePath());
+//                            throw new IllegalArgumentException();
+//                        }
+//                        i++;
+//                        break;
+//                    case "--noCluster":
+//                        noCluster = true;
+//                        break;
+//                    case "--lite":
+//                        liteMember = true;
+//                        break;
+//                    case "--hzConfigFile":
+//                        File testFile = new File(args[i + 1]);
+//                        if (!testFile.exists() || !testFile.isFile() || !testFile.canRead() || !testFile.getAbsolutePath().endsWith(".xml")) {
+//                            logger.log(Level.SEVERE, "{0} is not a valid path to an xml file and will be ignored", testFile.getAbsolutePath());
+//                            throw new IllegalArgumentException();
+//                        }
+//                        alternateHZConfigFile = testFile.toURI();
+//                        i++;
+//                        break;
+//                    case "--autoBindHttp":
+//                        autoBindHttp = true;
+//                        break;
+//                    case "--autoBindSsl":
+//                        autoBindSsl = true;
+//                        break;
+//                    case "--autoBindRange":
+//                        String autoBindRangeString = args[i + 1];
+//                        try {
+//                            autoBindRange = Integer.parseInt(autoBindRangeString);
+//                            if (autoBindRange < 1) {
+//                                throw new NumberFormatException("Not a valid auto bind range");
+//                            }
+//                        } catch (NumberFormatException nfe) {
+//                            logger.log(Level.SEVERE,
+//                                    "{0} is not a valid auto bind range number",
+//                                    autoBindRangeString);
+//                            throw new IllegalArgumentException();
+//                        }
+//                        i++;
+//                        break;
+//                    case "--enableHealthCheck":
+//                        String enableHealthCheckString = args[i + 1];
+//                        enableHealthCheck = Boolean.valueOf(enableHealthCheckString);
+//                        break;
+//                    case "--deployFromGAV":
+//                        if (GAVs == null) {
+//                            GAVs = new LinkedList<>();
+//                        }
+//
+//                        GAVs.add(args[i + 1]);
+//                        i++;
+//                        break;
+//                    case "--additionalRepository":
+//                        try {
+//                            // If there isn't a trailing /, add one
+//                            if (!args[i + 1].endsWith("/")) {
+//                                repositoryURLs.add(new URL(args[i + 1] + "/"));
+//                            } else {
+//                                repositoryURLs.add(new URL(args[i + 1]));
+//                            }
+//                        } catch (MalformedURLException ex) {
+//                            logger.log(Level.SEVERE, "{0} is not a valid URL and will be ignored", args[i + 1]);
+//                        }
+//
+//                        i++;
+//                        break;
+//                    case "--outputUberJar":
+//                        uberJar = new File(args[i + 1]);
+//                        i++;
+//                        break;
+//                    case "--systemProperties": {
+//                        File propertiesFile = new File(args[i + 1]);
+//                        userSystemProperties = new Properties();
+//                        try (FileReader reader = new FileReader(propertiesFile)) {
+//                            userSystemProperties.load(reader);
+//                            Enumeration<String> names = (Enumeration<String>) userSystemProperties.propertyNames();
+//                            while (names.hasMoreElements()) {
+//                                String name = names.nextElement();
+//                                System.setProperty(name, userSystemProperties.getProperty(name));
+//                            }
+//                        } catch (IOException e) {
+//                            logger.log(Level.SEVERE,
+//                                    "{0} is not a valid properties file",
+//                                    propertiesFile.getAbsolutePath());
+//                            throw new IllegalArgumentException(e);
+//                        }
+//                        if (!propertiesFile.isFile() && !propertiesFile.canRead()) {
+//                            logger.log(Level.SEVERE,
+//                                    "{0} is not a valid properties file",
+//                                    propertiesFile.getAbsolutePath());
+//                            throw new IllegalArgumentException();
+//
+//                        }
+//                    }
+//                    break;
+//                    case "--disablePhoneHome":
+//                        disablePhoneHome = true;
+//                        break;
+//                    case "--help":
+//                        System.err.println("Usage:\n  --noCluster  Disables clustering\n"
+//                                + "  --port <http-port-number> sets the http port\n"
+//                                + "  --sslPort <ssl-port-number> sets the https port number\n"
+//                                + "  --mcAddress <muticast-address> sets the cluster multicast group\n"
+//                                + "  --mcPort <multicast-port-number> sets the cluster multicast port\n"
+//                                + "  --clusterName <cluster-name> sets the Cluster Group Name\n"
+//                                + "  --clusterPassword <cluster-password> sets the Cluster Group Password\n"
+//                                + "  --startPort <cluster-start-port-number> sets the cluster start port number\n"
+//                                + "  --name <instance-name> sets the instance name\n"
+//                                + "  --rootDir <directory-path> Sets the root configuration directory and saves the configuration across restarts\n"
+//                                + "  --deploymentDir <directory-path> if set to a valid directory all war files in this directory will be deployed\n"
+//                                + "  --deploy <file-path> specifies a war file to deploy\n"
+//                                + "  --domainConfig <file-path> overrides the complete server configuration with an alternative domain.xml file\n"
+//                                + "  --minHttpThreads <threads-number> the minimum number of threads in the HTTP thread pool\n"
+//                                + "  --maxHttpThreads <threads-number> the maximum number of threads in the HTTP thread pool\n"
+//                                + "  --hzConfigFile <file-path> the hazelcast-configuration file to use to override the in-built hazelcast cluster configuration\n"
+//                                + "  --autoBindHttp sets autobinding of the http port to a non-bound port\n"
+//                                + "  --autoBindSsl sets autobinding of the https port to a non-bound port\n"
+//                                + "  --autoBindRange <number-of-ports> sets the maximum number of ports to look at for port autobinding\n"
+//                                + "  --lite sets the micro container to lite mode which means it clusters with other Payara Micro instances but does not store any cluster data\n"
+//                                + "  --enableHealthCheck <boolean> enables/disables Health Check Service (disabled by default).\n"
+//                                + "  --logo reveal the #BadAssFish\n"
+//                                + "  --deployFromGAV <list-of-artefacts> specifies a comma separated groupId,artifactId,versionNumber of an artefact to deploy from a repository\n"
+//                                + "  --additionalRepository <repo-url> specifies an additional repository to search for deployable artefacts in\n"
+//                                + "  --outputUberJar <file-path> packages up an uber jar at the specified path based on the command line arguments and exits\n"
+//                                + "  --systemProperties <file-path> Reads system properties from a file\n"
+//                                + "  --disablePhoneHome Disables sending of usage tracking information\n"
+//                                + "  --version Displays the version information\n"
+//                                + "  --logToFile <file-path> outputs all the Log entries to a user defined file\n"
+//                                + "  --logProperties <file-path> Allows user to set their own logging properties file\n"
+//                                + "  --accessLog <directory-path> Sets user defined directory path for the access log\n"
+//                                + "  --accessLogFormat Sets user defined log format for the access log\n"
+//                                + "  --help Shows this message and exits\n");
+//                        System.exit(1);
+//                        break;
+//                    case "--logToFile":
+//                         setUserLogFile(args[i + 1]);
+//                        break;
+//                    case "--accessLog":
+//                        File file = new File(args[i + 1]);
+//                        if (!file.exists() || !file.isDirectory() || !file.canWrite()) {
+//                            logger.log(Level.SEVERE, "{0} is not a valid directory for storing access logs as it must exist and be writable", file.getAbsolutePath());                            
+//                            throw new IllegalArgumentException();
+//                        }
+//                        setAccessLogDir(file.getAbsolutePath());
+//			break;
+//                    case "--accessLogFormat":
+//                        setAccessLogFormat(args[i + 1]);
+//			break;
+//                    case "--logProperties":
+//                        File logPropertiesFile = new File(args[i + 1]);
+//                        if (!logPropertiesFile.exists() || !logPropertiesFile.canRead() || logPropertiesFile.isDirectory() ) {
+//                            logger.log(Level.SEVERE, "{0} is not a valid properties file path", logPropertiesFile.getAbsolutePath());
+//                            throw new IllegalArgumentException();
+//                        } else {
+//                            setLogPropertiesFile(logPropertiesFile);
+//                        }
+//                        break;
+//                    case "--logo":
+//                        generateLogo = true;
+//                        break;
+//                }
+//            }
+//        }
+//    }
 
     private void deployAll() throws GlassFishException {
         // Deploy explicit wars first.
         int deploymentCount = 0;
         Deployer deployer = gf.getDeployer();
-        if (deployments != null) {
-            for (File war : deployments) {
+        if (cfgOpts.getDeployments() != null) {
+            for (File war : cfgOpts.getDeployments()) {
                 if (war.exists() && war.canRead()) {
                     deployer.deploy(war, "--availabilityenabled=true", "--force=true");
                     deploymentCount++;
@@ -1494,8 +1470,8 @@ public class PayaraMicro {
         }
 
         // Deploy from deployment directory
-        if (deploymentRoot != null) {
-            for (File war : deploymentRoot.listFiles()) {
+        if (cfgOpts.getDeploymentRoot() != null) {
+            for (File war : cfgOpts.getDeploymentRoot().listFiles()) {
                 String warPath = war.getAbsolutePath();
                 if (war.isFile() && war.canRead() && (warPath.endsWith(".war") || warPath.endsWith(".ear") || warPath.endsWith(".jar") || warPath.endsWith(".rar"))) {
                     deployer.deploy(war, "--availabilityenabled=true", "--force=true");
@@ -1505,7 +1481,7 @@ public class PayaraMicro {
         }
 
         // Deploy from URI only called if GAVs provided
-        if (GAVs != null) {
+        if (cfgOpts.getGAVs() != null) {
             // Convert the provided GAV Strings into target URLs
             getGAVURLs();
 
@@ -1592,12 +1568,12 @@ public class PayaraMicro {
 
     private void installFiles(GlassFishProperties gfproperties) {
         // make directories
-        File configDir = new File(rootDir.getAbsolutePath(), "config");
+        File configDir = new File(cfgOpts.getRootDir().getAbsolutePath(), "config");
         String[] configFiles;
         PrintWriter writer;
         String sCurrentLine;
         BufferedReader bufferedReader = null;
-        new File(rootDir.getAbsolutePath(), "docroot").mkdirs();
+        new File(cfgOpts.getRootDir().getAbsolutePath(), "docroot").mkdirs();
         configDir.mkdirs();
         if (logPropertiesFile) {
             File userLogPropsFile = new File(configDir.getAbsolutePath() + File.separator + userPropertiesFileName);
@@ -1620,7 +1596,7 @@ public class PayaraMicro {
             }
 
             try {
-                bufferedReader = new BufferedReader(new FileReader(userLogPropertiesFile ));
+                bufferedReader = new BufferedReader(new FileReader(cfgOpts.getUserLogPropertiesFile() ));
                 FileWriter fileWriter = new FileWriter(userLogPropsFile.getAbsoluteFile());
                 BufferedWriter bufferedWriter = new BufferedWriter(fileWriter);
                 while ((sCurrentLine = bufferedReader.readLine()) != null) {
@@ -1746,9 +1722,9 @@ public class PayaraMicro {
     private void getGAVURLs() throws GlassFishException {
         GAVConvertor gavConvertor = new GAVConvertor();
 
-        for (String gav : GAVs) {
+        for (String gav : cfgOpts.getGAVs()) {
             Map.Entry<String, URL> artefactMapEntry
-                    = gavConvertor.getArtefactMapEntry(gav, repositoryURLs);
+                    = gavConvertor.getArtefactMapEntry(gav, cfgOpts.getRepositoryURLs());
 
             if (deploymentURLsMap == null) {
                 deploymentURLsMap = new LinkedHashMap<>();
@@ -1765,45 +1741,45 @@ public class PayaraMicro {
      */
     private void logPortPrecedenceWarnings(boolean HTTPS) {
         if (HTTPS == true) {
-            if (alternateDomainXML != null) {
-                if (sslPort != Integer.MIN_VALUE) {
-                    if (autoBindSsl == true) {
+            if (cfgOpts.getAlternateDomainXML() != null) {
+                if (cfgOpts.getSslPort() != Integer.MIN_VALUE) {
+                    if (cfgOpts.isAutoBindSsl() == true) {
                         logger.log(Level.INFO, "Overriding HTTPS port value set"
-                                + " in {0} and auto-binding against " + sslPort,
-                                alternateDomainXML.getAbsolutePath());
+                                + " in {0} and auto-binding against " + cfgOpts.getSslPort(),
+                                cfgOpts.getAlternateDomainXML().getAbsolutePath());
                     } else {
                         logger.log(Level.INFO, "Overriding HTTPS port value set"
-                                + " in {0} with " + sslPort,
-                                alternateDomainXML.getAbsolutePath());
+                                + " in {0} with " + cfgOpts.getSslPort(),
+                                cfgOpts.getAlternateDomainXML().getAbsolutePath());
                     }
-                } else if (autoBindSsl == true) {
+                } else if (cfgOpts.isAutoBindSsl() == true) {
                     logger.log(Level.INFO, "Overriding HTTPS port value set"
                             + " in {0} and auto-binding against "
                             + defaultHttpsPort,
-                            alternateDomainXML.getAbsolutePath());
+                            cfgOpts.getAlternateDomainXML().getAbsolutePath());
                 } else {
                     logger.log(Level.INFO, "Overriding HTTPS port value set"
                             + " in {0} with " + defaultHttpsPort,
-                            alternateDomainXML.getAbsolutePath());
+                            cfgOpts.getAlternateDomainXML().getAbsolutePath());
                 }
             }
 
-            if (rootDir != null) {
-                File configFile = new File(rootDir.getAbsolutePath()
+            if (cfgOpts.getRootDir() != null) {
+                File configFile = new File(cfgOpts.getRootDir().getAbsolutePath()
                         + File.separator + "config" + File.separator
                         + "domain.xml");
                 if (configFile.exists()) {
-                    if (sslPort != Integer.MIN_VALUE) {
-                        if (autoBindSsl == true) {
+                    if (cfgOpts.getSslPort() != Integer.MIN_VALUE) {
+                        if (cfgOpts.isAutoBindSsl() == true) {
                             logger.log(Level.INFO, "Overriding HTTPS port value"
                                     + " set in {0} and auto-binding against "
-                                    + sslPort, configFile.getAbsolutePath());
+                                    + cfgOpts.getSslPort(), configFile.getAbsolutePath());
                         } else {
                             logger.log(Level.INFO, "Overriding HTTPS port value"
-                                    + " set in {0} with " + sslPort,
+                                    + " set in {0} with " + cfgOpts.getSslPort(),
                                     configFile.getAbsolutePath());
                         }
-                    } else if (autoBindSsl == true) {
+                    } else if (cfgOpts.isAutoBindSsl() == true) {
                         logger.log(Level.INFO, "Overriding HTTPS port value"
                                 + " set in {0} and auto-binding against "
                                 + defaultHttpsPort,
@@ -1817,46 +1793,46 @@ public class PayaraMicro {
                 }
             }
         } else {
-            if (alternateDomainXML != null) {
-                if (httpPort != Integer.MIN_VALUE) {
-                    if (autoBindHttp == true) {
+            if (cfgOpts.getAlternateDomainXML() != null) {
+                if (cfgOpts.getHttpPort() != Integer.MIN_VALUE) {
+                    if (cfgOpts.isAutoBindHttp() == true) {
                         logger.log(Level.INFO, "Overriding HTTP port value set "
-                                + "in {0} and auto-binding against " + httpPort,
-                                alternateDomainXML.getAbsolutePath());
+                                + "in {0} and auto-binding against " + cfgOpts.getHttpPort(),
+                                cfgOpts.getAlternateDomainXML().getAbsolutePath());
                     } else {
                         logger.log(Level.INFO, "Overriding HTTP port value set "
-                                + "in {0} with " + httpPort,
-                                alternateDomainXML.getAbsolutePath());
+                                + "in {0} with " + cfgOpts.getHttpPort(),
+                                cfgOpts.getAlternateDomainXML().getAbsolutePath());
                     }
-                } else if (autoBindHttp == true) {
+                } else if (cfgOpts.isAutoBindHttp() == true) {
                     logger.log(Level.INFO, "Overriding HTTP port value set "
                             + "in {0} and auto-binding against "
                             + defaultHttpPort,
-                            alternateDomainXML.getAbsolutePath());
+                            cfgOpts.getAlternateDomainXML().getAbsolutePath());
                 } else {
                     logger.log(Level.INFO, "Overriding HTTP port value set "
                             + "in {0} with default value of "
                             + defaultHttpPort,
-                            alternateDomainXML.getAbsolutePath());
+                            cfgOpts.getAlternateDomainXML().getAbsolutePath());
                 }
             }
 
-            if (rootDir != null) {
-                File configFile = new File(rootDir.getAbsolutePath()
+            if (cfgOpts.getRootDir() != null) {
+                File configFile = new File(cfgOpts.getRootDir().getAbsolutePath()
                         + File.separator + "config" + File.separator
                         + "domain.xml");
                 if (configFile.exists()) {
-                    if (httpPort != Integer.MIN_VALUE) {
-                        if (autoBindHttp == true) {
+                    if (cfgOpts.getHttpPort() != Integer.MIN_VALUE) {
+                        if (cfgOpts.isAutoBindHttp() == true) {
                             logger.log(Level.INFO, "Overriding HTTP port value "
                                     + "set in {0} and auto-binding against "
-                                    + httpPort, configFile.getAbsolutePath());
+                                    + cfgOpts.getHttpPort(), configFile.getAbsolutePath());
                         } else {
                             logger.log(Level.INFO, "Overriding HTTP port value "
-                                    + "set in {0} with " + httpPort,
+                                    + "set in {0} with " + cfgOpts.getHttpPort(),
                                     configFile.getAbsolutePath());
                         }
-                    } else if (autoBindHttp == true) {
+                    } else if (cfgOpts.isAutoBindHttp() == true) {
                         logger.log(Level.INFO, "Overriding HTTP port value "
                                 + "set in {0} and auto-binding against "
                                 + defaultHttpPort,
@@ -1897,38 +1873,38 @@ public class PayaraMicro {
         String alternateHZConfigFileStr = System.getProperty("payaramicro.hzConfigFile");
         if (alternateHZConfigFileStr != null && !alternateHZConfigFileStr.isEmpty()) {
             try {
-                alternateHZConfigFile = Thread.currentThread().getContextClassLoader().getResource(alternateHZConfigFileStr).toURI();
+                cfgOpts.setAlternateHZConfigFile(Thread.currentThread().getContextClassLoader().getResource(alternateHZConfigFileStr).toURI());
             } catch (URISyntaxException ex) {
                 logger.log(Level.WARNING, "payaramicro.hzConfigFile has invalid URI syntax and will be ignored", ex);
-                alternateHZConfigFile = null;
+                cfgOpts.setAlternateHZConfigFile(null);
             }
         }
 
-        autoBindHttp = Boolean.getBoolean("payaramicro.autoBindHttp");
-        autoBindRange = Integer.getInteger("payaramicro.autoBindRange", 5);
-        autoBindSsl = Boolean.getBoolean("payaramicro.autoBindSsl");
-        generateLogo = Boolean.getBoolean("payaramicro.logo");
+        cfgOpts.setAutoBindHttp(Boolean.getBoolean("payaramicro.autoBindHttp"));
+        cfgOpts.setAutoBindRange(Integer.getInteger("payaramicro.autoBindRange", 5));
+        cfgOpts.setAutoBindSsl(Boolean.getBoolean("payaramicro.autoBindSsl"));
+        cfgOpts.setGenerateLogo(Boolean.getBoolean("payaramicro.logo"));
         logToFile = Boolean.getBoolean("payaramicro.logToFile");
         enableAccessLog = Boolean.getBoolean("payaramicro.enableAccessLog");
         enableAccessLogFormat = Boolean.getBoolean("payaramicro.enableAccessLogFormat");
-        logPropertiesFile = Boolean.getBoolean("payaramicro.logPropertiesFile");
-        enableHealthCheck = Boolean.getBoolean("payaramicro.enableHealthCheck");
-        httpPort = Integer.getInteger("payaramicro.port", Integer.MIN_VALUE);
-        hzMulticastGroup = System.getProperty("payaramicro.mcAddress");
-        hzPort = Integer.getInteger("payaramicro.mcPort", Integer.MIN_VALUE);
-        hzStartPort = Integer.getInteger("payaramicro.startPort", Integer.MIN_VALUE);
-        hzClusterName = System.getProperty("payaramicro.clusterName");
-        hzClusterPassword = System.getProperty("payaramicro.clusterPassword");
-        liteMember = Boolean.getBoolean("payaramicro.lite");
-        maxHttpThreads = Integer.getInteger("payaramicro.maxHttpThreads", Integer.MIN_VALUE);
-        minHttpThreads = Integer.getInteger("payaramicro.minHttpThreads", Integer.MIN_VALUE);
-        noCluster = Boolean.getBoolean("payaramicro.noCluster");
-        disablePhoneHome = Boolean.getBoolean("payaramicro.disablePhoneHome");
+        cfgOpts.setBooleanLogPropertiesFile(Boolean.getBoolean("payaramicro.logPropertiesFile"));
+        cfgOpts.setEnableHealthCheck(Boolean.getBoolean("payaramicro.enableHealthCheck"));
+        cfgOpts.setHttpPort(Integer.getInteger("payaramicro.port", Integer.MIN_VALUE));
+        cfgOpts.setHzMulticastGroup(System.getProperty("payaramicro.mcAddress"));
+        cfgOpts.setHzPort(Integer.getInteger("payaramicro.mcPort", Integer.MIN_VALUE));
+        cfgOpts.setHzStartPort(Integer.getInteger("payaramicro.startPort", Integer.MIN_VALUE));
+        cfgOpts.setHzClusterName(System.getProperty("payaramicro.clusterName"));
+        cfgOpts.setHzClusterPassword(System.getProperty("payaramicro.clusterPassword"));
+        cfgOpts.setLiteMember(Boolean.getBoolean("payaramicro.lite"));
+        cfgOpts.setMaxHttpThreads(Integer.getInteger("payaramicro.maxHttpThreads", Integer.MIN_VALUE));
+        cfgOpts.setMinHttpThreads(Integer.getInteger("payaramicro.minHttpThreads", Integer.MIN_VALUE));
+        cfgOpts.setNoCluster(Boolean.getBoolean("payaramicro.noCluster"));
+        cfgOpts.setDisablePhoneHome(Boolean.getBoolean("payaramicro.disablePhoneHome"));
 
         // Set the rootDir file
         String rootDirFileStr = System.getProperty("payaramicro.rootDir");
         if (rootDirFileStr != null && !rootDirFileStr.isEmpty()) {
-            rootDir = new File(rootDirFileStr);
+            cfgOpts.setRootDir(new File(rootDirFileStr));
         }
 
         String name = System.getProperty("payaramicro.name");
@@ -1939,9 +1915,9 @@ public class PayaraMicro {
 
     private void packageUberJar() {
         long start = System.currentTimeMillis();
-        logger.info("Building Uber Jar... " + uberJar);
+        logger.info("Building Uber Jar... " + cfgOpts.getUberJar());
         String entryString;
-        try (JarOutputStream jos = new JarOutputStream(new FileOutputStream(uberJar));) {
+        try (JarOutputStream jos = new JarOutputStream(new FileOutputStream(cfgOpts.getUberJar()));) {
             // get the current payara micro jar
             URL url = this.getClass().getClassLoader().getResource("payara-boot.properties");
             JarURLConnection urlcon = (JarURLConnection) url.openConnection();
@@ -1953,8 +1929,8 @@ public class PayaraMicro {
                 JarEntry entry = entries.nextElement();
                 jos.putNextEntry(new JarEntry(entry.getName()));
                 InputStream is = jFile.getInputStream(entry);
-                if (entry.toString().contains("config/logging.properties") &&  logPropertiesFile) {
-                   is = new FileInputStream(new File(userLogPropertiesFile ));
+                if (entry.toString().contains("config/logging.properties") &&  cfgOpts.getLogPropertiesFile()) {
+                   is = new FileInputStream(new File(cfgOpts.getUserLogPropertiesFile() ));
                 }
      
                 byte[] buffer = new byte[4096];
@@ -1973,8 +1949,8 @@ public class PayaraMicro {
             jos.putNextEntry(deploymentDir);
             jos.flush();
             jos.closeEntry();
-            if (deployments != null) {
-                for (File deployment : deployments) {
+            if (cfgOpts.getDeployments() != null) {
+                for (File deployment : cfgOpts.getDeployments()) {
                     JarEntry deploymentEntry = new JarEntry("META-INF/deploy/" + deployment.getName());
                     jos.putNextEntry(deploymentEntry);
                     try (FileInputStream fis = new FileInputStream(deployment)) {
@@ -1991,8 +1967,8 @@ public class PayaraMicro {
                 }
             }
 
-            if (deploymentRoot != null) {
-                for (File deployment : deploymentRoot.listFiles()) {
+            if (cfgOpts.getDeploymentRoot() != null) {
+                for (File deployment : cfgOpts.getDeploymentRoot().listFiles()) {
                     if (deployment.isFile()) {
                         JarEntry deploymentEntry = new JarEntry("META-INF/deploy/" + deployment.getName());
                         jos.putNextEntry(deploymentEntry);
@@ -2011,7 +1987,7 @@ public class PayaraMicro {
                 }
             }
 
-            if (GAVs != null) {
+            if (cfgOpts.getGAVs() != null) {
                 try {
                     // Convert the provided GAV Strings into target URLs
                     getGAVURLs();
@@ -2041,75 +2017,75 @@ public class PayaraMicro {
             JarEntry je = new JarEntry("META-INF/deploy/payaramicro.properties");
             jos.putNextEntry(je);
             Properties props = new Properties();
-            if (hzMulticastGroup != null) {
-                props.setProperty("payaramicro.mcAddress", hzMulticastGroup);
+            if (cfgOpts.getHzMulticastGroup() != null) {
+                props.setProperty("payaramicro.mcAddress", cfgOpts.getHzMulticastGroup());
             }
 
-            if (hzPort != Integer.MIN_VALUE) {
-                props.setProperty("payaramicro.mcPort", Integer.toString(hzPort));
+            if (cfgOpts.getHzPort() != Integer.MIN_VALUE) {
+                props.setProperty("payaramicro.mcPort", Integer.toString(cfgOpts.getHzPort()));
             }
 
-            if (hzStartPort != Integer.MIN_VALUE) {
-                props.setProperty("payaramicro.startPort", Integer.toString(hzStartPort));
+            if (cfgOpts.getHzStartPort() != Integer.MIN_VALUE) {
+                props.setProperty("payaramicro.startPort", Integer.toString(cfgOpts.getHzStartPort()));
             }
 
             props.setProperty("payaramicro.name", instanceName);
 
-            if (rootDir != null) {
-                props.setProperty("payaramicro.rootDir", rootDir.getAbsolutePath());
+            if (cfgOpts.getRootDir() != null) {
+                props.setProperty("payaramicro.rootDir", cfgOpts.getRootDir().getAbsolutePath());
             }
 
-            if (alternateDomainXML != null) {
+            if (cfgOpts.getAlternateDomainXML() != null) {
                 props.setProperty("payaramicro.domainConfig", "META-INF/deploy/domain.xml");
             }
 
-            if (minHttpThreads != Integer.MIN_VALUE) {
-                props.setProperty("payaramicro.minHttpThreads", Integer.toString(minHttpThreads));
+            if (cfgOpts.getMinHttpThreads() != Integer.MIN_VALUE) {
+                props.setProperty("payaramicro.minHttpThreads", Integer.toString(cfgOpts.getMinHttpThreads()));
             }
 
-            if (maxHttpThreads != Integer.MIN_VALUE) {
-                props.setProperty("payaramicro.maxHttpThreads", Integer.toString(maxHttpThreads));
+            if (cfgOpts.getMaxHttpThreads() != Integer.MIN_VALUE) {
+                props.setProperty("payaramicro.maxHttpThreads", Integer.toString(cfgOpts.getMaxHttpThreads()));
             }
 
-            if (alternateHZConfigFile != null) {
+            if (cfgOpts.getAlternateHZConfigFile() != null) {
                 props.setProperty("payaramicro.hzConfigFile", "META-INF/deploy/hzconfig.xml");
             }
 
-            if (hzClusterName != null) {
-                props.setProperty("payaramicro.clusterName", hzClusterName);
+            if (cfgOpts.getHzClusterName() != null) {
+                props.setProperty("payaramicro.clusterName", cfgOpts.getHzClusterName());
             }
 
-            if (hzClusterPassword != null) {
-                props.setProperty("payaramicro.clusterPassword", hzClusterPassword);
+            if (cfgOpts.getHzClusterPassword() != null) {
+                props.setProperty("payaramicro.clusterPassword", cfgOpts.getHzClusterPassword());
             }
 
-            props.setProperty("payaramicro.autoBindHttp", Boolean.toString(autoBindHttp));
-            props.setProperty("payaramicro.autoBindSsl", Boolean.toString(autoBindSsl));
-            props.setProperty("payaramicro.autoBindRange", Integer.toString(autoBindRange));
-            props.setProperty("payaramicro.lite", Boolean.toString(liteMember));
-            props.setProperty("payaramicro.enableHealthCheck", Boolean.toString(enableHealthCheck));
-            props.setProperty("payaramicro.logo", Boolean.toString(generateLogo));
+            props.setProperty("payaramicro.autoBindHttp", Boolean.toString(cfgOpts.isAutoBindHttp()));
+            props.setProperty("payaramicro.autoBindSsl", Boolean.toString(cfgOpts.isAutoBindSsl()));
+            props.setProperty("payaramicro.autoBindRange", Integer.toString(cfgOpts.getAutoBindRange()));
+            props.setProperty("payaramicro.lite", Boolean.toString(cfgOpts.isLiteMember()));
+            props.setProperty("payaramicro.enableHealthCheck", Boolean.toString(cfgOpts.isEnableHealthCheck()));
+            props.setProperty("payaramicro.logo", Boolean.toString(cfgOpts.isGenerateLogo()));
             props.setProperty("payaramicro.logToFile", Boolean.toString(logToFile));
             props.setProperty("payaramicro.enableAccessLog", Boolean.toString(enableAccessLog));
             props.setProperty("payaramicro.enableAccessLogFormat", Boolean.toString(enableAccessLogFormat));
             props.setProperty("payaramicro.logPropertiesFile", Boolean.toString(logPropertiesFile));
-            props.setProperty("payaramicro.noCluster", Boolean.toString(noCluster));
-            props.setProperty("payaramicro.disablePhoneHome", Boolean.toString(disablePhoneHome));
+            props.setProperty("payaramicro.noCluster", Boolean.toString(cfgOpts.isNoCluster()));
+            props.setProperty("payaramicro.disablePhoneHome", Boolean.toString(cfgOpts.isDisablePhoneHome()));
 
-            if (httpPort != Integer.MIN_VALUE) {
-                props.setProperty("payaramicro.port", Integer.toString(httpPort));
+            if (cfgOpts.getHttpPort() != Integer.MIN_VALUE) {
+                props.setProperty("payaramicro.port", Integer.toString(cfgOpts.getHttpPort()));
             }
 
-            if (sslPort != Integer.MIN_VALUE) {
-                props.setProperty("payaramicro.sslPort", Integer.toString(sslPort));
+            if (cfgOpts.getSslPort() != Integer.MIN_VALUE) {
+                props.setProperty("payaramicro.sslPort", Integer.toString(cfgOpts.getSslPort()));
             }
 
             // write all user defined system properties
-            if (userSystemProperties != null) {
-                Enumeration<String> names = (Enumeration<String>) userSystemProperties.propertyNames();
+            if (cfgOpts.getUserSystemProperties() != null) {
+                Enumeration<String> names = (Enumeration<String>) cfgOpts.getUserSystemProperties().propertyNames();
                 while (names.hasMoreElements()) {
                     String name = names.nextElement();
-                    props.setProperty(name, userSystemProperties.getProperty(name));
+                    props.setProperty(name, cfgOpts.getUserSystemProperties().getProperty(name));
                 }
             }
 
@@ -2118,8 +2094,8 @@ public class PayaraMicro {
             jos.closeEntry();
 
             // add the alternate domain.xml file if present
-            if (alternateDomainXML != null && alternateDomainXML.isFile() && alternateDomainXML.canRead()) {
-                try (InputStream is = new FileInputStream(alternateDomainXML)) {
+            if (cfgOpts.getAlternateDomainXML() != null && cfgOpts.getAlternateDomainXML().isFile() && cfgOpts.getAlternateDomainXML().canRead()) {
+                try (InputStream is = new FileInputStream(cfgOpts.getAlternateDomainXML())) {
                     JarEntry domainXml = new JarEntry("META-INF/deploy/domain.xml");
                     jos.putNextEntry(domainXml);
                     byte[] buffer = new byte[4096];
@@ -2135,8 +2111,8 @@ public class PayaraMicro {
             }
 
             // add the alternate hazelcast config to the uberJar
-            if (alternateHZConfigFile != null) {
-                try (InputStream is = alternateHZConfigFile.toURL().openStream()) {
+            if (cfgOpts.getAlternateHZConfigFile() != null) {
+                try (InputStream is = cfgOpts.getAlternateHZConfigFile().toURL().openStream()) {
                     JarEntry domainXml = new JarEntry("META-INF/deploy/hzconfig.xml");
                     jos.putNextEntry(domainXml);
                     byte[] buffer = new byte[4096];
@@ -2151,10 +2127,10 @@ public class PayaraMicro {
                 }
             }
 
-            logger.info("Built Uber Jar " + uberJar + " in " + (System.currentTimeMillis() - start) + " (ms)");
+            logger.info("Built Uber Jar " + cfgOpts.getUberJar() + " in " + (System.currentTimeMillis() - start) + " (ms)");
 
         } catch (IOException ex) {
-            logger.log(Level.SEVERE, "Error creating Uber Jar " + uberJar.getAbsolutePath(), ex);
+            logger.log(Level.SEVERE, "Error creating Uber Jar " + cfgOpts.getUberJar().getAbsolutePath(), ex);
         }
 
     }
